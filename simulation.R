@@ -1,0 +1,391 @@
+setwd("/Users/yaejilim/Library/CloudStorage/GoogleDrive-yaeji.lim@stat.cau.ac.kr/My Drive/YJ2/Composite_files/final_code/github/")
+
+source("functions.R")
+source("other_functions.R")
+
+#devtools::install_github('msalibian/sparseFPCA', ref = "master")
+#devtools::install_github("statKim/robfpca")
+
+
+library(sparseFPCA)
+library(evd)
+library(fGarch)
+library(fMultivar)
+library(elasticnet)
+library(adegenet)
+library(mvtnorm)
+library(fdapace)
+library(rospca)
+library(mvnfast) 
+library(ald)
+library(truncnorm)
+library(skewt)
+library(fields)
+library(spam)
+library(elasticnet)
+library(rrcov)
+library(maps)
+library(glmnet)
+library(waveslim)
+library(ggplot2)
+library(LatticeKrig) # radia basis
+library(pracma)
+library(fda)
+library(far)
+library(softImpute)
+library(rrcovNA)
+library(ExtDist)
+library(glmnet)
+library(irlba)
+library(misty)
+library(robfpca)
+
+
+save_list=list()
+setting=1
+m.prob=0.2
+r.true=8
+sim.itr=c(1:2)
+n.sim= length(sim.itr)
+
+rec_error_full <- rec_error_missing<- eigen_error_full <-eigen_error_angle <-matrix(nrow=n.sim, ncol=4)
+
+for(sim in sim.itr){
+  
+  #start_time <- Sys.time()
+  print(paste(sim,'th iteration'))
+  
+  set.seed(343*(sim*1)+setting+5*r.true)
+  
+  t=seq(0.01,1,by = 0.01 )
+  n=100
+  
+  
+  
+  output =data_generation(t=t, n=n, r.true= r.true , setting=setting , sigma.u=1, m.prob=m.prob,symm=0.8, model=1,
+                          sigma.con=5)
+  
+  par(mfrow=c(1,3))
+  sam.id <- sample(1:n, size=3)
+  for (i in sam.id){
+    plot(output$par.dat[i,], type='l', main='', xlab='t', ylab='')
+    lines(output$true.dat[i,],col=2)  
+  }
+  
+  
+  ############################################################################
+  
+  true.dat =output$true.dat ;sim.dat= output$sim.dat;  par.dat=output$par.dat; par.dat0= output$par.dat0  ; phi.mat =output$phi.mat  
+  phi.mat=output$phi.mat	
+  delta =output$delta
+  
+  
+  ###############################################################
+  # 1. Proposed
+  ###################################################################
+  
+  # fourier
+  p=51  # number of basis functions/ fourier requires the odd number/ any large number can be used
+  fr_obj = create.fourier.basis(rangeval = c(0,1), nbasis = (p)) 
+  fbasisevals = eval.basis(t , fr_obj) 
+  fr.gs = orthonormalization(fbasisevals,basis=FALSE ,norm=TRUE) # orthonormalize the basis
+  
+  x.fr = matrix(nrow = n, ncol = p)
+  for (i in 1:n){
+    for (j in 1:p){
+      x.fr[i, j] = sum(par.dat0[i, ]*fr.gs[,j]) 
+    }
+  }
+  
+  x=x.fr; gs=fr.gs
+  
+  
+  r.prop = 13# when r.true=4; set r.prop=20 when r.true=8
+
+  fit_yj = proposed_yj_V2(x=x, r= r.prop, cv=FALSE, adhoc.cv=TRUE, op.lambda = 0.2, thresh = 5e-05, 
+                          lambda.seq = seq(0.35, 0.45, length=10), maxiter=200,maxiter.cv=200, K.cv=5, 
+                          sparsity.thres=0.83)
+  
+  est.pc<- matrix(0,nrow=length(t), ncol= r.prop)
+  for(ii in 1: r.prop){
+    pcf <- rep(0, length.out=length(t))
+    for(j in 1:p){
+      pcf<- pcf+ fit_yj$V[j,ii]*gs[,j]
+    }
+    
+    est.pc[,ii]=pcf
+  }
+  
+  # reconstruction using chosen PC functions
+  n.pc=r.true
+  closs.pca_rec=(fit_yj$U[,1:n.pc]%*% diag(fit_yj$Dsq[1:n.pc])) %*%t(est.pc[,1:n.pc])
+  
+  est.pc =norm_eigenfunction(est.pc, t)
+  
+  for(l in c(1: r.true)){    
+    est.pc[,l]=sign_eigenfunction((est.pc[,l]),(phi.mat[,l])   )
+  }
+  
+
+  par(mfrow=c(2,2))
+  
+  for(l in c(1:4)){
+    plot(t,(phi.mat[,l]), type="l", ylab="", xlab="", ylim=c(-2,2))
+    lines(t,(est.pc[,l]),col="blue", lwd = 2)
+  }
+  
+
+  
+  
+  
+  ######################################################################
+  # 2. robust functional principal components analysis (FPCA) estimator introduced in Boente and Salibian-Barrera, 2021
+  #####################################################################
+  r.pca= r.true
+  x2= par.dat
+  x.obs=na.indicator(x2)
+  gt=t(matrix(t, nrow=length(t), ncol=n))
+  gt[which(x.obs==0)]=NA
+  if(length(which(x.obs==0))!=0){
+  Bonte_data <- list(Ly = apply(x2, 1, function(y){ y[!is.na(y)] }),
+                     Lt = apply(gt, 1, function(y){ y[!is.na(y)] }))}
+  if(length(which(x.obs==0))==0){
+    Bonte_data <- list( Ly = lapply(1:n, function(i) { x2[i, ] }), 
+                        Lt = lapply(1:n, function(i) { gt[i, ] }) )  }
+
+  bwmu_boente <- bwcov_boente <- 0.02;
+  alpha=0.2
+  cov.boente.obj <- cov_boente(Bonte_data,t, alpha=alpha, bw.mu = bwmu_boente, bw.cov = bwcov_boente,
+                               seed = seed)
+  mu.boente <- cov.boente.obj$mu
+  cov.boente <- cov.boente.obj$cov
+  boente.noise.est <- cov.boente.obj$noise_var
+  pca.boente.obj <- funPCA(Bonte_data$Lt, Bonte_data$Ly, 
+                           mu.boente, cov.boente, sig2 = boente.noise.est, 
+                           t,  K = r.pca)
+  boente.eigen=pca.boente.obj$eig.fun
+  Boente_rec=predict(pca.boente.obj, K = r.pca)
+  
+  
+  ###########################################
+  ## 3.  Raymond and Lee: huber loss
+  ############################################  
+  
+  x2= x.fr
+  RL_res = R_Lee(x2, r=r.prop, lambda= 20  )
+  RL_pca_temp = RL_res$V
+  
+  RL_pca2 <- matrix(0,nrow=length(t), ncol= r.prop)
+  for(ii in 1: r.pca){
+    pcf <- rep(0, length.out=length(t))
+    for(j in 1:p){
+      pcf<- pcf+ RL_pca_temp[j,ii]*gs[,j]
+    }
+    
+    RL_pca2[,ii]=pcf
+  }
+  
+  
+  RL_res_rec2=( RL_res$U[,1:n.pc]%*% diag( RL_res$Dsq[1:n.pc])) %*%t( RL_pca2[,1:n.pc])
+  
+  
+  ##############################
+  ## 4.  Kraus
+  ##############################
+  x2= par.dat   
+  mu.kraus <- mean.missfd(x2)
+  cov.kraus <- var.missfd(x2)
+  eig.kraus	<- eigen.missfd(cov.kraus)$vectors
+  #eig.kraus <- get_eigen(cov.kraus, work.grid)
+  K_kraus <- r.pca
+  kraus.pca <- eig.kraus[, 1:K_kraus]
+  
+  
+  cand <- which(
+    (apply(x2, 1, function(x){ sum(is.na(x)) }) > 0) 
+  )
+ 
+  
+  if(length(cand)!=0){ 
+  rec_Kraus=matrix(nrow=nrow(x2), ncol=ncol(x2))
+  for (i in 1:length(cand)) {
+    ind <- cand[i]
+    pred_comp <-  pred.missfd(x2[ind, ], x2)
+    #print(x2[ind, ])
+    NA_ind <- which(is.na(x2[ind, ]))   # index of missing periods
+    rec_Kraus[ind,NA_ind ] <-  pred_comp[NA_ind]
+  }
+  }else{
+    
+  }
+  
+
+  Kraus.score=matrix(nrow=nrow(x2), ncol=r.pca)
+  for(i in 1:nrow(x2)){	
+    tryCatch({
+      Kraus.score[i,]=pred.score.missfd(x2[i,], kraus.pca,x2 ,gcv.df.factor=2)
+    }, error=function(e){})
+  }
+  
+    
+  
+  rec_Kraus_full= mu.kraus + Kraus.score %*% t(kraus.pca )
+  
+  #################################
+ 
+  est.pc =norm_eigenfunction(est.pc, t)
+  boente.eigen =norm_eigenfunction(boente.eigen, t)
+  RL_pca2 =norm_eigenfunction(RL_pca2, t)
+  kraus.pca=norm_eigenfunction(kraus.pca, t)
+  
+  for(l in c(1: r.true)){    
+    est.pc[,l]=sign_eigenfunction((est.pc[,l]),(phi.mat[,l])   )
+    boente.eigen[,l] = sign_eigenfunction((boente.eigen[,l]),(phi.mat[,l])   )
+    RL_pca2[,l] = sign_eigenfunction((RL_pca2[,l]),(phi.mat[,l])   )
+    kraus.pca[,l] = sign_eigenfunction((kraus.pca[,l]),(phi.mat[,l])   )
+  } 
+  
+  ##########################
+  # pc function
+  par(mfrow=c(2,2))
+  
+  for(l in c(1:4)){
+    plot(t,(phi.mat[,l]), type="l", ylab="", xlab="", ylim=c(-2,2))
+    lines(t,(est.pc[,l]),col="blue", lwd = 2)
+    lines(t,(boente.eigen[,l]),col="purple", lwd = 2)
+    lines(t,(RL_pca2[,l]),col="green", lwd = 2)
+    lines(t,(kraus.pca[,l]),col="pink", lwd = 2)
+  legend("topright", col=c("black","blue","red","purple","green",'pink'), lwd=2, legend=c("true","Proposed",'Yao','Boente','R&Lee','Kraus'),cex=1)
+  }
+  
+  ##########################
+  # reconstruction performance through plots
+  par(mfrow=c(2,2))
+  tmp.id = sample(1:n, 4)
+  #tmp.id = c(52,245)
+  for(l in tmp.id){
+    plot(t,sim.dat[l,], type="p", ylab="", xlab="")
+    lines(t,true.dat[l,],col="black", lwd=2)
+    lines(t, closs.pca_rec[l,],col="blue", lwd = 2)
+    lines(t, Boente_rec[l,],col="purple", lwd = 2)
+    lines(t, RL_res_rec2[l,],col="green", lwd = 2)
+    lines(t, rec_Kraus_full[l,],col="pink", lwd = 2)
+    #legend("topright", col=c("black","blue","red","purple",'pink',"green"), lwd=2, legend=c("true","Proposed",'PCA','Beonte','R&Lee'),cex=1)
+    
+  }  
+  
+  rec_error_full[which(sim.itr==sim),]=
+    c(
+      mean((true.dat - closs.pca_rec)^2) ,# MSE between true (before contamination) and reconstructed curves
+      mean((true.dat - Boente_rec)^2),
+      mean((true.dat - RL_res_rec2)^2),
+      mean((true.dat - rec_Kraus_full)^2)
+    )
+  
+  rec_error_missing[which(sim.itr==sim),]=
+    c(
+      mean((true.dat[delta==0] - closs.pca_rec[delta==0])^2) ,# MSE between true (before contamination) and reconstructed curves
+      mean((true.dat[delta==0] - Boente_rec[delta==0])^2),
+      mean((true.dat[delta==0] - RL_res_rec2[delta==0])^2),
+      mean((true.dat[delta==0] - rec_Kraus_full[delta==0])^2)
+      
+    )
+  
+  
+  eva.pca=r.true
+  eigen_error_full[which(sim.itr==sim), ]=
+    c(
+      mean((phi.mat[,c(1:eva.pca)] - est.pc[,c(1:eva.pca)])^2) ,
+      mean((phi.mat[,c(1:eva.pca)] - boente.eigen[,c(1:eva.pca)])^2),
+      mean((phi.mat[,c(1:eva.pca)] - RL_pca2[,c(1:eva.pca)])^2),
+      mean((phi.mat[,c(1:eva.pca)] - kraus.pca[,c(1:eva.pca)])^2)
+    )
+  
+  
+  eigen_error_angle[which(sim.itr==sim), ] <-c(
+    mean(
+      sapply(1:eva.pca, function(i){
+        subspace(est.pc[, i], phi.mat[, i])
+      })
+    ),
+
+    mean(
+      sapply(1:eva.pca, function(i){
+        subspace(boente.eigen[, i], phi.mat[, i])
+      })
+    ),
+    mean(
+      sapply(1:eva.pca, function(i){
+        subspace(RL_pca2[, i], phi.mat[, i])
+      })
+    ),
+    mean(
+      sapply(1:eva.pca, function(i){
+        subspace(kraus.pca[, i], phi.mat[, i])
+      })
+    )
+  )  
+  
+  print(which(sim.itr==sim))
+  print(round( rec_error_full[which(sim.itr==sim), ],3))
+  print(round( eigen_error_full[which(sim.itr==sim), ],3))
+  print(round(eigen_error_angle[which(sim.itr==sim),],3))
+  save_list[[which(sim.itr==sim)]]=list()
+  save_list[[which(sim.itr==sim)]]$true.dat=true.dat
+  save_list[[which(sim.itr==sim)]]$gs = gs
+  save_list[[which(sim.itr==sim)]]$r.pca = r.pca
+  save_list[[which(sim.itr==sim)]]$closs.pca_rec = closs.pca_rec
+  save_list[[which(sim.itr==sim)]]$Boente_rec = Boente_rec
+  save_list[[which(sim.itr==sim)]]$RL_rec = RL_res_rec2
+  save_list[[which(sim.itr==sim)]]$kraus_rec = rec_Kraus_full
+  save_list[[which(sim.itr==sim)]]$phi.mat = phi.mat
+  save_list[[which(sim.itr==sim)]]$est.pc = est.pc
+  save_list[[which(sim.itr==sim)]]$boente.eigen = boente.eigen
+  save_list[[which(sim.itr==sim)]]$RL_pc = RL_pca2
+  save_list[[which(sim.itr==sim)]]$kraus.pca = kraus.pca
+  save_list[[which(sim.itr==sim)]]$rec_error_full = rec_error_full[which(sim.itr==sim), ]
+  save_list[[which(sim.itr==sim)]]$eigen_error_full = eigen_error_full[which(sim.itr==sim),]
+  save_list[[which(sim.itr==sim)]]$eigen_error_angle = eigen_error_angle[which(sim.itr==sim),]
+  save_list[[which(sim.itr==sim)]]$rec_error_missing = rec_error_missing[which(sim.itr==sim),]
+  
+}
+
+t1=cbind( round( apply( eigen_error_full  ,2, mean, na.rm=T) ,3),
+          round( apply( eigen_error_angle  ,2, mean, na.rm=T) ,3),
+          round( apply( rec_error_full  ,2, mean, na.rm=T) ,3),
+          round( apply( rec_error_missing  ,2, mean, na.rm=T) ,3) )
+
+t2=cbind( round( apply( eigen_error_full  ,2, sd, na.rm=T) ,3),
+          round( apply( eigen_error_angle  ,2, sd, na.rm=T) ,3),
+          round( apply( rec_error_full  ,2, sd, na.rm=T) ,3),
+          round( apply( rec_error_missing  ,2, sd, na.rm=T) ,3) )
+
+
+temp2=NA
+for(i in 1:nrow(t1)){
+  temp1=NA
+  for(j in 1:ncol(t1)){
+    temp1=c( temp1 , paste(t1[i,j], '(', t2[i,j] , ') & ' , sep='') )
+  }
+  
+  temp2= rbind(temp2, temp1)
+  
+}
+
+result=temp2[-1,-1]
+
+rownames(result)=c('Proposed','Boente','R&LEE_proj','kraus')
+colnames(result)=c('Eigen','Eigen_angle', 'Rec_full','Rec_missing')
+
+result
+
+
+###boxplot
+par(mfrow=c(1,4))
+colnames(eigen_error_angle)=colnames(rec_error_missing)=colnames(eigen_error_full)=colnames(rec_error_full)=c('Proposed','Boente',"R&Lee","Kraus")
+boxplot(eigen_error_angle, main='Eigen angle', ylim=c(0,1))
+boxplot(eigen_error_full, main='Eigen MSE', ylim=c(0,1))
+boxplot(rec_error_full, main='Reconstruction MSE', ylim=c(0,2))
+boxplot(rec_error_missing, main='Reconstruction Missing MSE', ylim=c(0,10))
+
+
