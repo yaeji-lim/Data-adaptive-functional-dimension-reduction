@@ -1,7 +1,3 @@
-setwd("/Users/yaejilim/Library/CloudStorage/GoogleDrive-yaeji.lim@stat.cau.ac.kr/My Drive/YJ2/Composite_files/final_code/github/")
-
-source("functions.R")
-source("other_functions.R")
 
 #devtools::install_github('msalibian/sparseFPCA', ref = "master")
 #devtools::install_github("statKim/robfpca")
@@ -40,12 +36,15 @@ library(irlba)
 library(misty)
 library(robfpca)
 
+source("functions.R")
+source("other_functions.R")
+
 
 save_list=list()
 setting=1
 m.prob=0.2
 r.true=8
-sim.itr=c(1:2)
+sim.itr=c(1:100)
 n.sim= length(sim.itr)
 
 rec_error_full <- rec_error_missing<- eigen_error_full <-eigen_error_angle <-matrix(nrow=n.sim, ncol=4)
