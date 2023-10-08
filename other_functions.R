@@ -1,4 +1,56 @@
 
+
+R_Lee <-function(x2, r, lambda= 0.2 ){
+  
+  
+  Psi  = function(M,c){
+    M.2 = 2*M
+    ind1 =( M>c)
+    M.2[ind1]= 2*c
+    ind2 = (-M>c)
+    M.2[ind2]=-2*c
+    
+    return(M.2)
+  }
+  
+  
+  X=x2
+  
+  c= 1.345*sqrt(var(as.vector(x2)) )
+  
+  eps = 10^-5
+  maxiter = 200
+  cond=TRUE
+  k=0
+  r.huber = r
+  nrob = softImpute(x2,rank=r.huber,lambda=lambda)
+  nrob.recon = nrob$u%*%diag(nrob$d)%*%t(nrob$v)
+  Y.1 = nrob.recon
+  err=c()
+  while(cond){
+    k=k+1
+    Y.0=Y.1
+    E = X - Y.0 
+    Z = Y.0 + Psi(E, c=c)/2
+    tmp = softImpute(Z,rank=r.huber,lambda=lambda)
+    Y.1 = tmp$u%*%diag(tmp$d)%*%t(tmp$v)
+    
+    cond = !(sum((Y.0 - Y.1)^2)/sum((Y.0^2)) < eps | k > maxiter)  
+    
+    err=c(err,sum((Y.0 - Y.1)^2)/sum((Y.0^2)))
+  }
+  #print(k)
+  
+  output<-list()
+  output$U = tmp$u
+  output$V = tmp$v
+  output$Dsq = tmp$d
+  output$rec = Y.1
+  
+  return(output)
+  
+}
+
 ####################################
 Frob=function(Uold,Dsqold,Vold,U,Dsq,V){
   denom=sum(Dsqold^2)
@@ -203,13 +255,7 @@ suv <-
 
 
 simpute.als.yj.L1<-function (x, J = 2, thresh = 1e-05,lambda=0,maxit=100,trace.it=TRUE, warm.start=NULL, 
-                             final.svd=TRUE, alpha=0.5) 
-{ ### x is a matrix, possibly with NAs
-  #source("softImpute_source.R")
-  
-  #x=Z; J=r; thresh = 1e-05;lambda=lambda; maxit=100; trace.it=FALSE; warm.start=NULL; final.svd=TRUE;
-  #warm.start = clean.warm.start(svd(x)); maxit=100; trace.it=FALSE; final.svd=FALSE; J=r
-  
+                             final.svd=TRUE, alpha=0.5) {
   n <- dim(x)
   m <- n[2]
   n <- n[1]
@@ -258,33 +304,27 @@ simpute.als.yj.L1<-function (x, J = 2, thresh = 1e-05,lambda=0,maxit=100,trace.i
     U.old=U
     V.old=V
     Dsq.old=Dsq
-    
-    ## U step
-    #B=t(U)%*%xfill
-    #if(lambda>0)B=B*((Dsq)/(Dsq+lambda))
+
     
     X.tmp=UD(U,sqrt(Dsq),n)
-    #sum(diag(t(X.tmp)%*%X.tmp))
-    #X.tmp=U
+
     B.tmp = c()
     for(j in 1:ncol(x)){
       B.tmp = cbind(B.tmp, as.matrix(coef(glmnet(X.tmp, xfill[,j], lambda=lambda/sd(xfill[,j]), family="gaussian", intercept = F, alpha=alpha, 
                                                  thresh = 1e-06, standardize = FALSE))))
     }
-    ##B2= B.tmp[-1,]
+
     B = diag(sqrt(Dsq),J,J)%*%B.tmp[-1,]
-    
-    
-    #hist(B-B2)
+
     Bsvd=svd(t(B))
     V=Bsvd$u
     Dsq=(Bsvd$d)
     U=U%*%Bsvd$v
     xhat=U %*%(Dsq*t(V))
     xfill[xnas]=xhat[xnas]
-    ###The next line we could have done later; this is to match with sparse version
+
     if(trace.it) obj=(.5*sum( (xfill-xhat)[!xnas]^2)+lambda*sum(Dsq))/nz
-    ## V step
+ 
     A=t(xfill%*%V)
     if(lambda>0)A=A*(Dsq/(Dsq+lambda))
     
@@ -337,8 +377,6 @@ svd.als.yj.L1=function(x, rank.max=2, lambda=0,thresh = 1e-05, maxit=100,trace.i
 
 
 setGeneric("svd.als",svd.als)
-#setMethod("svd.als","sparseMatrix",svd.als.sparse)
-#setMethod("svd.als","SparseplusLowRank",svd.als.sparse)
 
 #####################################################################
 ### (1) mean function, covariance operator and its eigendecomposition
@@ -1025,29 +1063,9 @@ lsfpca <- function(X, ncpus=4, opt.h.mu, opt.h.cov, hs.mu=seq(10, 25, by=1), hs.
                 tt=unique(ours$cov.fun2$grid[,1]),
                 ss=unique(ours$cov.fun2$grid[,1]), k=k, s=s, rho=rho.param)
 
-  # # select rho
-  # n <- length(X$x)
-  # tt.grid <- unique(ours$cov.fun2$grid[,1])
-  # sigma2.1 <- vector('list', n) #rep(NA, n)
-  # for(j in 1:n)
-  #   sigma2.1[[j]] <- (X$x[[j]] - approx(x=tt.grid, y=Xpred$pred[j, ], xout=X$pp[[j]], method='linear')$y)
-  # # sigma2.1 <- mean(unlist(sigma2.1)^2) # RobStatTM::mscale(unlist(sigma2.1))^2 #, delta=.3, tuning.chi=2.560841))
-  # sigma2.1 <- mean( sapply(sigma2.1, function(a) mean(a^2) ) )
-  # Xpred <- pred(X=X, muh=ours$mh, cov.fun=ours$cov.fun2$G,
-  #               tt=unique(ours$cov.fun2$grid[,1]),
-  #               ss=unique(ours$cov.fun2$grid[,1]), k=k, s=s, rho=sigma2.1)
-  # sigma2.2 <- vector('list', n) #rep(NA, n)
-  # for(j in 1:n)
-  #   sigma2.2[[j]] <- (X$x[[j]] - approx(x=tt.grid, y=Xpred$pred[j, ], xout=X$pp[[j]], method='linear')$y)
-  # # sigma2.2 <- mean(unlist(sigma2.2)^2) # RobStatTM::mscale(unlist(sigma2.2))^2 #, delta=.3, tuning.chi=2.560841) )
-  # sigma2.2 <- mean( sapply(sigma2.2, function(a) mean(a^2) ) )
-  # rho.param <- sigma2.2
-
-  # select rho with condition number
-  # la1 <- svd(ours$cov.fun2$G)$d[1]
+ 
   la1 <- eigen(ours$cov.fun2$G)$values[1]
-  # rho.param <- uniroot(function(rho, la1, max.kappa) return( (la1+rho)/rho - max.kappa ), la1=la1,
-  #                      max.kappa = max.kappa, interval=c(1e-15, 1e15))$root
+
   rho.param <- la1/(max.kappa-1)
   Xpred <- pred(X=X, muh=ours$mh, cov.fun=ours$cov.fun2$G,
                 tt=unique(ours$cov.fun2$grid[,1]),
@@ -1060,86 +1078,12 @@ lsfpca <- function(X, ncpus=4, opt.h.mu, opt.h.cov, hs.mu=seq(10, 25, by=1), hs.
 
 
 
-#
-# cov.fun.cv.new <- function(X, muh, k.cv, hs, hwide, seed=123) {
-#   # CV "in the regression problem formulation"
-#   # muh = estimated mean function
-#   # mii <- min( ti <- unlist(X$pp) )
-#   # maa <- max( ti )
-#   # tt <- seq(mii, maa, length=ncov)
-#   lh <- length(hs)
-#   n <- length(X$x)
-#   if(exists(".Random.seed", where=.GlobalEnv)) old.seed <- .Random.seed
-#   set.seed(seed)
-#   fl <- sample( (1:n) %% k.cv + 1)
-#   tmspe <- rep(NA, lh)
-#   Xtest <- Xtrain <- vector('list', 2)
-#   names(Xtrain) <- c('x', 'pp')
-#   names(Xtest) <- c('x', 'pp')
-#   mspe1 <- mspe <- rep(NA, lh)
-#   for(j in 1:lh) {
-#     ress1 <- ress <- vector('numeric', 0)
-#     for(i in 1:k.cv) {
-#       this <- (1:n)[ fl != i ] # training set
-#       Xtrain$x <- X$x[ this ]
-#       Xtrain$pp <- X$pp[ this ]
-#       Xtest$x <- X$x[ -this ]
-#       Xtest$pp <- X$pp[ -this ]
-#       ma <- matrixx(Xtrain, muh[ this ])
-#       ma2 <- matrixx(Xtest, muh[ -this ])
-#       beta.cv <- try(betahat.new.ls(X=Xtrain, h=hs[j], mh=muh[ this ],
-#                                  ma=ma, ma2=ma2, trace=FALSE))
-#       if( class(beta.cv) != 'try-error') {
-#         re1 <- re <- rep(NA, length(beta.cv))
-#         for(uu in 1:length(beta.cv)) {
-#             w2 <- k.epan((ma$mt[,1]-ma2$mt[uu,1])/hwide)
-#             w3 <- k.epan((ma$mt[,2]-ma2$mt[uu,1])/hwide)
-#             we <- w2*w3
-#             M <- ma$m[ we > 0, ]
-#             we <- we[ we > 0]
-#             B <- NA
-#             if( length(we) > 0 ) B <- as.numeric( coef( lm(M[ ,2] ~ M[, 1] - 1, weights = we) ) )
-#             supersigma <- sd( as.numeric( M[,2] - B * M[, 1] ) )
-#             re[uu] <- (ma2$m[uu ,2] - beta.cv[uu] * ma2$m[uu , 1])/supersigma
-#             re1[uu] <- (ma2$m[uu ,2] - beta.cv[uu] * ma2$m[uu , 1])
-#         }
-#         ress <- c(ress, re)
-#         ress1 <- c(ress1, re1)
-#       }
-#     }
-#     mspe1[j] <- mean( ress1^2 )
-#     mspe[j] <- mean( ress^2 )
-#     print(c(mspe[j], mspe1[j]))
-#   }
-#   if(exists('old.seed')) assign('.Random.seed', old.seed, envir=.GlobalEnv)
-#   return(list(mspe=mspe, mspe1=mspe1))
-# }
-
-# betahat.new.ls <- function(X, h, mh, ma, ma2, trace=FALSE) {
-#   nn <- dim(ma2$mt)[1]
-#   betahat <- rep(NA, nn)
-#   # sigmahat <- rep(NA, nn)
-#   # for(j in 1:nn) sigmahat[j] <- gtthat(X=X, t0=tt[j], h=h, muhat=mh)$gtt
-#   for(j in 1:nn) {
-#     t0 <- ma2$mt[j, 1]
-#     s0 <- ma2$mt[j, 2]
-#     betahat[j] <- gtshat.ls(X=X,t0=t0,s0=s0,h=h,mh=mh,matx=ma,eps=1e-6)
-#     # gamma[s0, t0] / gamma[t0, t0]
-#   }
-#   return(betahat=betahat)
-# }
-
-
 
 
 ### mean and covariance in Boente (2020)
 cov_boente <- function(x,gr, alpha, bw.mu, bw.cov, cv = FALSE, ncores = 1, seed = 123) {
-  X <- list(x = x$Ly,
-            pp = x$Lt)
-   gr <- gr
-
-  
-  
+  X <- list(x = x$Ly, pp = x$Lt)
+   
   start_time <- Sys.time()
   
   # Start cluster
@@ -1184,24 +1128,7 @@ cov_boente <- function(x,gr, alpha, bw.mu, bw.cov, cv = FALSE, ncores = 1, seed 
                               start_time, 
                               units = "secs"), 3),
                " secs"))
-  #start_time <- Sys.time()
-  ## smooth it
-  #yy <- as.vector(cov.fun2$G)
-  #xx <- cov.fun2$grid
-  #tmp <- fitted(mgcv::gam(yy ~ s(xx[,1], xx[,2]), family='gaussian'))
-  #tmp <- fitted(mgcv::gam(yy ~ s(xx[,1]) +s( xx[,2]), family='gaussian'))
-  #cov.fun2$G <- matrix(tmp, length(unique(xx[,1])), length(unique(xx[,1])))
-  #cov.fun2$G <- ( cov.fun2$G + t(cov.fun2$G) ) / 2
-  
-  #end_time <- Sys.time()
-  #print(paste0("smoothing stage : ", 
-  #             round(difftime(end_time, 
-  #                            start_time, 
-  #                            units = "secs"), 3),
-  #             " secs"))
-  #start_time <- Sys.time()
-  
-  # obtain mean function
+
   df <- data.frame(t = unlist(X$pp),
                    mu = unlist(mh))
   df <- unique(df)
@@ -1210,16 +1137,6 @@ cov_boente <- function(x,gr, alpha, bw.mu, bw.cov, cv = FALSE, ncores = 1, seed 
   mu <- ConvertSupport(fromGrid = df$t[idx], 
                        toGrid = gr,
                        mu = df$mu[idx])
-  
-  
-  #end_time <- Sys.time()
-  #print(paste0("converet stage : ", 
-  #             round(difftime(end_time, 
-  #                            start_time, 
-  #                            units = "secs"), 3),
-  #             " secs"))
-  
-  
   
   # noise variance
   noise_var <- eigen(cov.fun2$G)$values[1] / (1e3 - 1)

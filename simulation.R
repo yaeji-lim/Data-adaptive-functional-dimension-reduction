@@ -24,7 +24,7 @@ library(maps)
 library(glmnet)
 library(waveslim)
 library(ggplot2)
-library(LatticeKrig) # radia basis
+library(LatticeKrig) 
 library(pracma)
 library(fda)
 library(far)
@@ -40,7 +40,6 @@ source("functions.R")
 source("other_functions.R")
 
 
-save_list=list()
 setting=1
 m.prob=0.2
 r.true=8
@@ -51,7 +50,7 @@ rec_error_full <- rec_error_missing<- eigen_error_full <-eigen_error_angle <-mat
 
 for(sim in sim.itr){
   
-  #start_time <- Sys.time()
+
   print(paste(sim,'th iteration'))
   
   set.seed(343*(sim*1)+setting+5*r.true)
@@ -83,7 +82,6 @@ for(sim in sim.itr){
   # 1. Proposed
   ###################################################################
   
-  # fourier
   p=51  # number of basis functions/ fourier requires the odd number/ any large number can be used
   fr_obj = create.fourier.basis(rangeval = c(0,1), nbasis = (p)) 
   fbasisevals = eval.basis(t , fr_obj) 
@@ -134,9 +132,7 @@ for(sim in sim.itr){
   }
   
 
-  
-  
-  
+
   ######################################################################
   # 2. robust functional principal components analysis (FPCA) estimator introduced in Boente and Salibian-Barrera, 2021
   #####################################################################
@@ -195,7 +191,6 @@ for(sim in sim.itr){
   mu.kraus <- mean.missfd(x2)
   cov.kraus <- var.missfd(x2)
   eig.kraus	<- eigen.missfd(cov.kraus)$vectors
-  #eig.kraus <- get_eigen(cov.kraus, work.grid)
   K_kraus <- r.pca
   kraus.pca <- eig.kraus[, 1:K_kraus]
   
@@ -210,7 +205,6 @@ for(sim in sim.itr){
   for (i in 1:length(cand)) {
     ind <- cand[i]
     pred_comp <-  pred.missfd(x2[ind, ], x2)
-    #print(x2[ind, ])
     NA_ind <- which(is.na(x2[ind, ]))   # index of missing periods
     rec_Kraus[ind,NA_ind ] <-  pred_comp[NA_ind]
   }
@@ -230,7 +224,9 @@ for(sim in sim.itr){
   
   rec_Kraus_full= mu.kraus + Kraus.score %*% t(kraus.pca )
   
-  #################################
+  ##########################
+  # pc function estimation performance
+  ##########################
  
   est.pc =norm_eigenfunction(est.pc, t)
   boente.eigen =norm_eigenfunction(boente.eigen, t)
@@ -243,9 +239,7 @@ for(sim in sim.itr){
     RL_pca2[,l] = sign_eigenfunction((RL_pca2[,l]),(phi.mat[,l])   )
     kraus.pca[,l] = sign_eigenfunction((kraus.pca[,l]),(phi.mat[,l])   )
   } 
-  
-  ##########################
-  # pc function
+
   par(mfrow=c(2,2))
   
   for(l in c(1:4)){
@@ -257,11 +251,13 @@ for(sim in sim.itr){
   legend("topright", col=c("black","blue","red","purple","green",'pink'), lwd=2, legend=c("true","Proposed",'Yao','Boente','R&Lee','Kraus'),cex=1)
   }
   
+  
   ##########################
-  # reconstruction performance through plots
+  #  reconstruction performance 
+  ##########################
+
   par(mfrow=c(2,2))
   tmp.id = sample(1:n, 4)
-  #tmp.id = c(52,245)
   for(l in tmp.id){
     plot(t,sim.dat[l,], type="p", ylab="", xlab="")
     lines(t,true.dat[l,],col="black", lwd=2)
@@ -269,8 +265,7 @@ for(sim in sim.itr){
     lines(t, Boente_rec[l,],col="purple", lwd = 2)
     lines(t, RL_res_rec2[l,],col="green", lwd = 2)
     lines(t, rec_Kraus_full[l,],col="pink", lwd = 2)
-    #legend("topright", col=c("black","blue","red","purple",'pink',"green"), lwd=2, legend=c("true","Proposed",'PCA','Beonte','R&Lee'),cex=1)
-    
+
   }  
   
   rec_error_full[which(sim.itr==sim),]=
@@ -326,28 +321,12 @@ for(sim in sim.itr){
   )  
   
   print(which(sim.itr==sim))
-  print(round( rec_error_full[which(sim.itr==sim), ],3))
-  print(round( eigen_error_full[which(sim.itr==sim), ],3))
-  print(round(eigen_error_angle[which(sim.itr==sim),],3))
-  save_list[[which(sim.itr==sim)]]=list()
-  save_list[[which(sim.itr==sim)]]$true.dat=true.dat
-  save_list[[which(sim.itr==sim)]]$gs = gs
-  save_list[[which(sim.itr==sim)]]$r.pca = r.pca
-  save_list[[which(sim.itr==sim)]]$closs.pca_rec = closs.pca_rec
-  save_list[[which(sim.itr==sim)]]$Boente_rec = Boente_rec
-  save_list[[which(sim.itr==sim)]]$RL_rec = RL_res_rec2
-  save_list[[which(sim.itr==sim)]]$kraus_rec = rec_Kraus_full
-  save_list[[which(sim.itr==sim)]]$phi.mat = phi.mat
-  save_list[[which(sim.itr==sim)]]$est.pc = est.pc
-  save_list[[which(sim.itr==sim)]]$boente.eigen = boente.eigen
-  save_list[[which(sim.itr==sim)]]$RL_pc = RL_pca2
-  save_list[[which(sim.itr==sim)]]$kraus.pca = kraus.pca
-  save_list[[which(sim.itr==sim)]]$rec_error_full = rec_error_full[which(sim.itr==sim), ]
-  save_list[[which(sim.itr==sim)]]$eigen_error_full = eigen_error_full[which(sim.itr==sim),]
-  save_list[[which(sim.itr==sim)]]$eigen_error_angle = eigen_error_angle[which(sim.itr==sim),]
-  save_list[[which(sim.itr==sim)]]$rec_error_missing = rec_error_missing[which(sim.itr==sim),]
-  
+
 }
+
+
+
+
 
 t1=cbind( round( apply( eigen_error_full  ,2, mean, na.rm=T) ,3),
           round( apply( eigen_error_angle  ,2, mean, na.rm=T) ,3),
@@ -377,14 +356,3 @@ rownames(result)=c('Proposed','Boente','R&LEE_proj','kraus')
 colnames(result)=c('Eigen','Eigen_angle', 'Rec_full','Rec_missing')
 
 result
-
-
-###boxplot
-par(mfrow=c(1,4))
-colnames(eigen_error_angle)=colnames(rec_error_missing)=colnames(eigen_error_full)=colnames(rec_error_full)=c('Proposed','Boente',"R&Lee","Kraus")
-boxplot(eigen_error_angle, main='Eigen angle', ylim=c(0,1))
-boxplot(eigen_error_full, main='Eigen MSE', ylim=c(0,1))
-boxplot(rec_error_full, main='Reconstruction MSE', ylim=c(0,2))
-boxplot(rec_error_missing, main='Reconstruction Missing MSE', ylim=c(0,10))
-
-
