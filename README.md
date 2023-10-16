@@ -1,8 +1,13 @@
-## Data-adaptive-functional-dimension-reduction
+ **Data-adaptive-functional-dimension-reduction**
+======
+
 
 Code to reproduce simulation results from “A data-adaptive dimension reduction for functional data via penalized low-rank approximation” by Yeonjoo Park, Hee-Seok Oh, and Yaeji Lim.
 
-#Code
+Code
+--------
+
+
 -simData_gen.R: 
 contain source function generating simulation data sets. Based on Section 3.1, there are two options for the model (model=1 or 2) and three options for error structures (setting=1,2 or 3). We can also set true dimension K (K.true=5 or 8), missing proportions (m.prob= 0, 0.1 or 0.2), asymmetricity parameter for skewed errors (symm), sample size (n), and the variance of model contamination error (sigma.con).
 
@@ -22,7 +27,10 @@ contain proposed_FDR() to implement the proposed method following Section 2.3 pr
 produce results displayed in Figure 2 and Table 1. The tuning parameter lambda can be chosen by adhoc CV by adhoc.CV=TRUE. Or you can set sparsity.level = 0.75 to 0.85 if the sparsity is desired to be a specific level.
 
 
-#Instructions for Use
+Instructions for Use
+--------
+
+
 1.	Install all packages in simulation.R
 2.	Load all source and help functions: simData_gen.R, comparison_methods.R, other_functions.R and FDR.R
 3.	Run simulation.R with interested model and error structure options.
