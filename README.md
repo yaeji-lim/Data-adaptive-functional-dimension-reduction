@@ -15,7 +15,7 @@ contain remaining help functions necessary for the implementation.
 -FDR.R: 
 contain proposed_FDR() to implement the proposed method following Section 2.3 practical algorithm. Also, it includes proposed_FDR_L2(), the non-robust version of the proposed method using squared loss errors instead of the composite loss error function. There are several options to choose the tuning parameter $\lambda$.
 -	ad-hoc approach (Section 2.4.1)  by setting adhoc.CV=TRUE
--	sparsity threshold: if we set the desired sparsity of $\boldsymbol{Phi}$ and set sparsity.level=c, then $\lambda$ will be chosen from values among the pre-specified lambda.sequence that first achieves the sparsity equal to or higher than c.
+-	sparsity threshold: if we set the desired sparsity of $\boldsymbol{\Phi}$ and set sparsity.level=c, then $\lambda$ will be chosen from values among the pre-specified lambda.sequence that first achieves the sparsity equal to or higher than c.
 -	The number of dimension $q$ setting at the algorithm: as described in Section 2.4.2, we set q sufficiently large. In the simulation study, when K.true=5, we set q=15, and when K.true=8, we set q=20.
 
 -simulation.R: 
